@@ -88,6 +88,36 @@ msgstr "用于提供校园网登录 IP 和 MAC 地址的 WAN 接口。"
 msgid "Auto"
 msgstr "自动"
 
+msgid "Connectivity check interval"
+msgstr "连通性测试间隔"
+
+msgid "Seconds between automatic connectivity checks. Set to 0 to disable automatic checks."
+msgstr "自动连通性测试的间隔秒数。设置为 0 可禁用自动测试。"
+
+msgid "Test internet connectivity"
+msgstr "测试公网连通性"
+
+msgid "Internet connectivity"
+msgstr "公网连通性"
+
+msgid "Test campus connectivity"
+msgstr "测试校园网连通性"
+
+msgid "Campus connectivity"
+msgstr "校园网连通性"
+
+msgid "Test"
+msgstr "测试"
+
+msgid "Not tested"
+msgstr "未测试"
+
+msgid "Connected"
+msgstr "已连接"
+
+msgid "Unreachable"
+msgstr "不可达"
+
 msgid "Number of bound interfaces"
 msgstr "已绑定的接口数量"
 

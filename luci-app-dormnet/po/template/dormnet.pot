@@ -88,6 +88,36 @@ msgstr ""
 msgid "Auto"
 msgstr ""
 
+msgid "Connectivity check interval"
+msgstr ""
+
+msgid "Seconds between automatic connectivity checks. Set to 0 to disable automatic checks."
+msgstr ""
+
+msgid "Test internet connectivity"
+msgstr ""
+
+msgid "Internet connectivity"
+msgstr ""
+
+msgid "Test campus connectivity"
+msgstr ""
+
+msgid "Campus connectivity"
+msgstr ""
+
+msgid "Test"
+msgstr ""
+
+msgid "Not tested"
+msgstr ""
+
+msgid "Connected"
+msgstr ""
+
+msgid "Unreachable"
+msgstr ""
+
 msgid "Number of bound interfaces"
 msgstr ""
 

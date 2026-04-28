@@ -8,7 +8,12 @@
           "extra_args_account",
           "list_target",
           "status",
-          "logs"
+          "logs",
+          "ping_internet",
+          "ping_campus"
+        ],
+        "network.interface.*": [
+          "status"
         ]
       },
       "uci": [

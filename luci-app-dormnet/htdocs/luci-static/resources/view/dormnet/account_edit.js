@@ -2,6 +2,7 @@
 'require view';
 'require form';
 'require network';
+'require poll';
 'require uci';
 'require tools.dormnet as dormnet';
 
@@ -24,6 +25,36 @@ function wanNetworkIds() {
     }
 
     return ids;
+}
+
+function selectedLoginIface(currentAccountId) {
+    return uci.get('dormnet', currentAccountId, 'login_iface') || wanNetworkIds()[0] || '';
+}
+
+function renderConnectivityStatus(id) {
+    return E('span', { id: id }, _('Not tested'));
+}
+
+function updateConnectivityStatus(id, result) {
+    const element = document.getElementById(id);
+    if (!element) {
+        return;
+    }
+
+    element.style.color = result.success ? 'green' : 'red';
+    element.textContent = result.success ? _('Connected') : _('Unreachable');
+}
+
+function testConnectivity(currentAccountId, tester, statusId) {
+    const iface = selectedLoginIface(currentAccountId);
+    if (!iface) {
+        updateConnectivityStatus(statusId, { success: false });
+        return Promise.resolve();
+    }
+
+    return L.resolveDefault(tester(iface)).then(function (result) {
+        updateConnectivityStatus(statusId, result);
+    });
 }
 
 // noinspection JSAnnotator
@@ -68,6 +99,46 @@ return view.extend({
         o.value('', _('Auto'));
         for (const networkId of wanNetworkIds()) {
             o.value(networkId, networkId);
+        }
+
+        o = s.option(form.Value, 'connectivity_check_interval', _('Connectivity check interval'));
+        o.description = _('Seconds between automatic connectivity checks. Set to 0 to disable automatic checks.');
+        o.datatype = 'uinteger';
+        o.default = '0';
+        o.placeholder = '0';
+
+        o = s.option(form.Button, '_test_internet', _('Test internet connectivity'));
+        o.inputtitle = _('Test');
+        o.inputstyle = 'apply';
+        o.onclick = function () {
+            return testConnectivity(currentAccountId, dormnet.pingInternet, 'internet_status');
+        };
+
+        o = s.option(form.DummyValue, '_internet_status', _('Internet connectivity'));
+        o.cfgvalue = function () {
+            return renderConnectivityStatus('internet_status');
+        };
+
+        o = s.option(form.Button, '_test_campus', _('Test campus connectivity'));
+        o.inputtitle = _('Test');
+        o.inputstyle = 'apply';
+        o.onclick = function () {
+            return testConnectivity(currentAccountId, dormnet.pingCampus, 'campus_status');
+        };
+
+        o = s.option(form.DummyValue, '_campus_status', _('Campus connectivity'));
+        o.cfgvalue = function () {
+            return renderConnectivityStatus('campus_status');
+        };
+
+        const connectivityCheckInterval = parseInt(uci.get('dormnet', currentAccountId, 'connectivity_check_interval') || '0', 10);
+        if (connectivityCheckInterval) {
+            poll.add(function () {
+                return Promise.all([
+                    testConnectivity(currentAccountId, dormnet.pingInternet, 'internet_status'),
+                    testConnectivity(currentAccountId, dormnet.pingCampus, 'campus_status'),
+                ]);
+            }, connectivityCheckInterval);
         }
 
         s = m.section(form.GridSection, 'bind_iface', _('Bound Interfaces'));

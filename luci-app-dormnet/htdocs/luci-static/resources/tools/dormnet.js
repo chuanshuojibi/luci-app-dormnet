@@ -43,6 +43,20 @@ const callDormnetLogs = rpc.declare({
     expect: { '': {} }
 });
 
+const callDormnetPingInternet = rpc.declare({
+    object: 'luci.dormnet',
+    method: 'ping_internet',
+    params: [ 'iface' ],
+    expect: { '': {} }
+});
+
+const callDormnetPingCampus = rpc.declare({
+    object: 'luci.dormnet',
+    method: 'ping_campus',
+    params: [ 'iface' ],
+    expect: { '': {} }
+});
+
 // noinspection JSAnnotator
 return baseclass.extend({
     buildInfo: function () {
@@ -59,6 +73,12 @@ return baseclass.extend({
     },
     logs: function () {
         return callDormnetLogs();
+    },
+    pingInternet: function (iface) {
+        return callDormnetPingInternet(iface);
+    },
+    pingCampus: function (iface) {
+        return callDormnetPingCampus(iface);
     },
     restart: function () {
         return callRCInit('dormnet', 'reload');
