@@ -32,14 +32,44 @@ jobs:
             libncurses-dev libssl-dev python3-setuptools rsync swig unzip \
             zlib1g-dev file wget curl xz-utils zstd
 
+      - name: Cache OpenWrt SDK
+        id: cache-sdk
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.SDK_DIR }}
+          key: openwrt-sdk-24.10.2-x86-64-${{ hashFiles('.github/workflows/build-ipk.yml') }}
+          restore-keys: |
+            openwrt-sdk-24.10.2-x86-64-
+
       - name: Download OpenWrt SDK
+        if: steps.cache-sdk.outputs.cache-hit != 'true'
         run: |
           wget -O "$SDK_ARCHIVE" "$SDK_URL"
           tar --zstd -xf "$SDK_ARCHIVE"
           mv openwrt-sdk-24.10.2-x86-64_gcc-13.3.0_musl.Linux-x86_64 "$SDK_DIR"
 
+      - name: Cache OpenWrt downloads
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.SDK_DIR }}/dl
+          key: openwrt-dl-24.10.2-x86-64-${{ hashFiles('dormnet-src/go.sum') }}
+          restore-keys: |
+            openwrt-dl-24.10.2-x86-64-
+
+      - name: Cache Go build cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-openwrt-24.10.2-x86-64-${{ hashFiles('dormnet-src/go.sum') }}
+          restore-keys: |
+            go-openwrt-24.10.2-x86-64-
+
       - name: Prepare package links
         run: |
+          rm -rf "$SDK_DIR/package/dormnet" "$SDK_DIR/package/luci-app-dormnet"
+          rm -rf "$SDK_DIR/build_dir/target-"*/dormnet-* "$SDK_DIR/build_dir/target-"*/luci-app-dormnet-*
           ln -s "$GITHUB_WORKSPACE/dormnet" "$SDK_DIR/package/dormnet"
           ln -s "$GITHUB_WORKSPACE/luci-app-dormnet" "$SDK_DIR/package/luci-app-dormnet"
 
