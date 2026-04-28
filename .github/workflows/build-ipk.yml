@@ -76,6 +76,29 @@ jobs:
           restore-keys: |
             openwrt-feeds-24.10.2-v1-
 
+      - name: Cache OpenWrt host build (golang/host etc.)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.SDK_DIR }}/staging_dir/host
+            ${{ env.SDK_DIR }}/staging_dir/hostpkg
+            ${{ env.SDK_DIR }}/build_dir/host
+            ${{ env.SDK_DIR }}/build_dir/hostpkg
+            ${{ env.SDK_DIR }}/tmp
+          key: openwrt-host-24.10.2-x86-64-v1-${{ hashFiles('.github/workflows/build-ipk.yml') }}
+          restore-keys: |
+            openwrt-host-24.10.2-x86-64-v1-
+
+      - name: Cache OpenWrt toolchain stamps & build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.SDK_DIR }}/staging_dir/toolchain-x86_64_gcc-13.3.0_musl/stamp
+            ${{ env.SDK_DIR }}/build_dir/toolchain-x86_64_gcc-13.3.0_musl
+          key: openwrt-toolchain-24.10.2-x86-64-v1
+          restore-keys: |
+            openwrt-toolchain-24.10.2-x86-64-v1
+
       - name: Cache Go build cache
         uses: actions/cache@v4
         with:
