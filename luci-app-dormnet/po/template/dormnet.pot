@@ -34,6 +34,15 @@ msgstr ""
 msgid "Peer Mode"
 msgstr ""
 
+msgid "Login account"
+msgstr ""
+
+msgid "Select the saved account used for campus network login."
+msgstr ""
+
+msgid "All accounts"
+msgstr ""
+
 msgid "Use software-defined networking"
 msgstr ""
 
@@ -68,6 +77,15 @@ msgid "Username"
 msgstr ""
 
 msgid "Password"
+msgstr ""
+
+msgid "Login interface"
+msgstr ""
+
+msgid "The WAN interface used to provide IP and MAC address for campus network login."
+msgstr ""
+
+msgid "Auto"
 msgstr ""
 
 msgid "Number of bound interfaces"

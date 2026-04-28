@@ -2,6 +2,7 @@
 'require view';
 'require form';
 'require poll';
+'require uci';
 'require tools.dormnet as dormnet';
 
 function renderStatus(running) {
@@ -22,6 +23,7 @@ return view.extend({
         return Promise.all([
             dormnet.status(),
             dormnet.buildInfo(),
+            uci.load('dormnet'),
         ]);
     },
     render: function(data) {
@@ -56,6 +58,14 @@ return view.extend({
         o.default = 'master';
         o.value('master', _('Master Mode'));
         o.value('peer', _('Peer Mode'));
+
+        o = s.option(form.ListValue, 'login_account', _('Login account'));
+        o.description = _('Select the saved account used for campus network login.');
+        o.optional = true;
+        o.value('', _('All accounts'));
+        for (const account of uci.sections('dormnet', 'account')) {
+            o.value(account['.name'], account.username || account['.name']);
+        }
 
         o = s.option(form.Flag, 'use_sd_network', _('Use software-defined networking'));
         o.description = _("Select when you need multiple geographically dispersed devices to use the campus network simultaneously.")

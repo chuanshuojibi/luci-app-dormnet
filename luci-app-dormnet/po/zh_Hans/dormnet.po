@@ -34,6 +34,15 @@ msgstr "主节点模式"
 msgid "Peer Mode"
 msgstr "叶节点模式"
 
+msgid "Login account"
+msgstr "登录账号"
+
+msgid "Select the saved account used for campus network login."
+msgstr "选择用于校园网登录的已保存账号。"
+
+msgid "All accounts"
+msgstr "全部账号"
+
 msgid "Use software-defined networking"
 msgstr "启用组网"
 
@@ -69,6 +78,15 @@ msgstr "用户名"
 
 msgid "Password"
 msgstr "密码"
+
+msgid "Login interface"
+msgstr "登录接口"
+
+msgid "The WAN interface used to provide IP and MAC address for campus network login."
+msgstr "用于提供校园网登录 IP 和 MAC 地址的 WAN 接口。"
+
+msgid "Auto"
+msgstr "自动"
 
 msgid "Number of bound interfaces"
 msgstr "已绑定的接口数量"

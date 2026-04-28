@@ -2,13 +2,10 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=dormnet
 PKG_VERSION:=0.1.0
-PKG_RELEASE:=1
+PKG_RELEASE:=2
 
-PKG_SOURCE:=$(PKG_NAME)-$(PKG_VERSION).tar.gz
-PKG_SOURCE_SUBDIR:=$(PKG_NAME)-$(PKG_VERSION)
-PKG_SOURCE_PROTO:=git
-PKG_SOURCE_URL:=https://github.com/openwrt-dormnet/dormnet.git
-PKG_MIRROR_HASH:=1b5ad012709ffe6f087a10769be6dea77b07bf8b866cdd9f8e6ab3d98c6d7986
+PKG_BUILD_DIR:=$(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)
+DORMNET_SRC_DIR?=$(realpath $(dir $(lastword $(MAKEFILE_LIST)))/../dormnet-src)
 
 PKG_LICENSE:=AGPL3.0
 PKG_MAINTAINER:=Haven Madray <sgpublic2002@gmail.com>
@@ -41,6 +38,12 @@ endef
 
 define Package/dormnet/conffiles
 /etc/config/dormnet
+endef
+
+define Build/Prepare
+	$(RM) -r $(PKG_BUILD_DIR)
+	$(INSTALL_DIR) $(PKG_BUILD_DIR)
+	$(CP) $(DORMNET_SRC_DIR)/* $(PKG_BUILD_DIR)/
 endef
 
 define Package/dormnet/install

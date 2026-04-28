@@ -42,6 +42,11 @@ return view.extend({
         o.modalonly = true;
         o.rmempty = false;
 
+        o = s.option(form.DummyValue, 'login_iface', _('Login interface'));
+        o.cfgvalue = function (section_id) {
+            return uci.get('dormnet', section_id, 'login_iface') || _('Auto');
+        };
+
         o = s.option(form.Value, '_iface_conf_count', _('Bound Interfaces'));
         o.readonly = true;
         o.modalonly = false;

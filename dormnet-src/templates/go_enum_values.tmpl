@@ -1,0 +1,12 @@
+func (x {{.enum.Name}}) AllValues() map[string]{{.enum.Name}} {
+	return maps.Clone(_{{.enum.Name}}Value)
+}
+
+var _{{.enum.Name}}Names = map[{{.enum.Name}}]string{ {{ range $rIndex, $value := .enum.Values }}
+    {{ $value.PrefixedName }}: "{{ $value.PrefixedName }}",
+{{- end}}
+}
+
+func (x {{.enum.Name}}) Name() string {
+	return _{{.enum.Name}}Names[x]
+}

@@ -9,6 +9,23 @@ function accountId() {
     return L.env.requestpath[5];
 }
 
+function wanNetworkIds() {
+    const ids = [];
+
+    for (const zone of uci.sections('firewall', 'zone')) {
+        if (zone.name !== 'wan') {
+            continue;
+        }
+
+        const networks = L.toArray(zone.network);
+        for (const network of networks) {
+            ids.push(network);
+        }
+    }
+
+    return ids;
+}
+
 // noinspection JSAnnotator
 return view.extend({
     load: function () {
@@ -16,6 +33,7 @@ return view.extend({
             dormnet.supportedTargets(),
             dormnet.extraArgsAccount(accountId()),
             network.getNetworks(),
+            uci.load('firewall'),
         ]);
     },
     render: function(data) {
@@ -43,6 +61,14 @@ return view.extend({
         o = s.option(form.Value, 'password', _('Password'));
         o.password = true;
         o.rmempty = false;
+
+        o = s.option(form.ListValue, 'login_iface', _('Login interface'));
+        o.description = _('The WAN interface used to provide IP and MAC address for campus network login.');
+        o.optional = true;
+        o.value('', _('Auto'));
+        for (const networkId of wanNetworkIds()) {
+            o.value(networkId, networkId);
+        }
 
         s = m.section(form.GridSection, 'bind_iface', _('Bound Interfaces'));
         s.anonymous = true;
