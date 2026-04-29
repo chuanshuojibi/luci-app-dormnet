@@ -72,8 +72,11 @@ return view.extend({
 
         const supportedTargets = data[0];
         const extraArgs = data[1];
-        const networks = data[2];
+        const networks = data[2] || [];
         const currentAccountId = accountId();
+
+        const targetList = (supportedTargets && supportedTargets.data) || [];
+        const extraArgList = (extraArgs && extraArgs.data) || [];
 
         m = new form.Map('dormnet', `${_('Account Edit')} >> ${currentAccountId}`);
 
@@ -82,7 +85,7 @@ return view.extend({
         o = s.option(form.ListValue, 'type', _('Type'));
         o.rmempty = false;
         o.readonly = true;
-        for (const target of supportedTargets.data) {
+        for (const target of targetList) {
             o.value(target.id, _(target.name));
         }
 
@@ -170,22 +173,21 @@ return view.extend({
             o.value(name, name);
         }
 
-        for (const arg of extraArgs.data) {
+        for (const arg of extraArgList) {
+            if (!arg || !arg.type || !form[arg.type]) continue;
             o = s.option(form[arg.type], arg.id, _(arg.title));
-            o.password = arg.is_pwd;
+            o.password = !!arg.is_pwd;
             o.description = arg.desc;
-            o.default = arg.default;
+            if (arg.default !== undefined) o.default = arg.default;
             if (arg.required) {
                 o.rmempty = false;
             } else {
                 o.optional = true;
             }
-            if (arg.modalonly) {
-                o.modalonly = true;
-            }
-            if (arg.type === 'ListValue') {
+            if (arg.modalonly) o.modalonly = true;
+            if (arg.type === 'ListValue' && Array.isArray(arg.candidates)) {
                 for (const item of arg.candidates) {
-                    o.value(item.value, _(item.name))
+                    o.value(item.value, _(item.name));
                 }
             }
         }
