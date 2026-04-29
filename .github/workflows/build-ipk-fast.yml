@@ -76,12 +76,13 @@ jobs:
       - name: Build po2lmo (LuCI i18n compiler)
         run: |
           set -e
-          mkdir -p tools/po2lmo && cd tools/po2lmo
-          BASE=https://raw.githubusercontent.com/openwrt/luci/master/modules/luci-base/src
-          curl -sSLf -o po2lmo.c       "$BASE/po2lmo.c"
-          curl -sSLf -o template_lmo.c "$BASE/template_lmo.c"
-          curl -sSLf -o template_lmo.h "$BASE/template_lmo.h"
-          gcc -O2 -o po2lmo po2lmo.c template_lmo.c
+          # 浅克隆 luci 仅取需要的子目录，~5 秒
+          git clone --depth=1 --filter=blob:none --sparse \
+            https://github.com/openwrt/luci.git tools/luci
+          ( cd tools/luci && git sparse-checkout set modules/luci-base/src )
+          make -C tools/luci/modules/luci-base/src po2lmo
+          echo "PO2LMO=$PWD/tools/luci/modules/luci-base/src/po2lmo" >> "$GITHUB_ENV"
+          ls -l tools/luci/modules/luci-base/src/po2lmo
 
       - name: Assemble ipk packages
         env:
@@ -135,7 +136,7 @@ jobs:
           cp -a luci-app-dormnet/root/. "$ROOT/"
           mkdir -p "$ROOT/usr/lib/lua/luci/i18n"
           # zh_Hans -> LuCI 命名 zh-cn
-          tools/po2lmo/po2lmo \
+          "$PO2LMO" \
             luci-app-dormnet/po/zh_Hans/dormnet.po \
             "$ROOT/usr/lib/lua/luci/i18n/dormnet.zh-cn.lmo"
           cat > "$CTRL/control" <<EOF
