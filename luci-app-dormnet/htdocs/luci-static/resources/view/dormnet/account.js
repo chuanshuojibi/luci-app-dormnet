@@ -1,26 +1,14 @@
 'use strict';
 'require view';
 'require form';
-'require network';
 'require uci';
 'require tools.dormnet as dormnet';
-
-function wanNetworkIds() {
-    const ids = [];
-    for (const zone of uci.sections('firewall', 'zone')) {
-        if (zone.name !== 'wan') continue;
-        for (const n of L.toArray(zone.network)) ids.push(n);
-    }
-    return ids;
-}
 
 // noinspection JSAnnotator
 return view.extend({
     load: function () {
         return Promise.all([
             dormnet.supportedTargets(),
-            network.getNetworks(),
-            uci.load('firewall'),
         ]);
     },
     render: function(data) {
@@ -51,12 +39,6 @@ return view.extend({
         o = s.option(form.Value, 'password', _('Password'));
         o.password = true;
         o.rmempty = false;
-
-        o = s.option(form.ListValue, 'login_iface', _('Login interface'));
-        o.value('', _('Auto'));
-        for (const id of wanNetworkIds()) {
-            o.value(id, id);
-        }
 
         o = s.option(form.DummyValue, '_iface_conf_count', _('Bound Interfaces'));
         o.cfgvalue = function (section_id) {

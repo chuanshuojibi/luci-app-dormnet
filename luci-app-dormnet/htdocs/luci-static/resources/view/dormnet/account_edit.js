@@ -10,50 +10,45 @@ function accountId() {
     return L.env.requestpath[5];
 }
 
-function wanNetworkIds() {
+function allNetworkIds(networks) {
     const ids = [];
-
-    for (const zone of uci.sections('firewall', 'zone')) {
-        if (zone.name !== 'wan') {
-            continue;
-        }
-
-        const networks = L.toArray(zone.network);
-        for (const network of networks) {
-            ids.push(network);
-        }
+    for (const n of (networks || [])) {
+        const name = n.getName();
+        if (!name || name === 'loopback') continue;
+        ids.push(name);
     }
-
     return ids;
 }
 
-function selectedLoginIface(currentAccountId) {
-    return uci.get('dormnet', currentAccountId, 'login_iface') || wanNetworkIds()[0] || '';
+function statusBadge(id, label) {
+    return E('span', {
+        id: id,
+        style: 'display:inline-block;min-width:5em;padding:.15em .5em;border-radius:.3em;background:#eee;color:#666;font-style:italic;text-align:center;'
+    }, label || _('Not tested'));
 }
 
-function renderConnectivityStatus(id) {
-    return E('span', { id: id }, _('Not tested'));
+function setBadge(id, state, text) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    let bg = '#eee', fg = '#666';
+    if (state === 'ok')      { bg = '#d4edda'; fg = '#155724'; }
+    else if (state === 'bad'){ bg = '#f8d7da'; fg = '#721c24'; }
+    else if (state === 'wait'){ bg = '#fff3cd'; fg = '#856404'; }
+    el.style.background = bg;
+    el.style.color = fg;
+    el.style.fontStyle = state ? 'normal' : 'italic';
+    el.textContent = text;
 }
 
-function updateConnectivityStatus(id, result) {
-    const element = document.getElementById(id);
-    if (!element) {
-        return;
-    }
-
-    element.style.color = result.success ? 'green' : 'red';
-    element.textContent = result.success ? _('Connected') : _('Unreachable');
-}
-
-function testConnectivity(currentAccountId, tester, statusId) {
-    const iface = selectedLoginIface(currentAccountId);
+function runTest(badgeId, iface, tester) {
     if (!iface) {
-        updateConnectivityStatus(statusId, { success: false });
+        setBadge(badgeId, 'bad', _('No interface'));
         return Promise.resolve();
     }
-
-    return L.resolveDefault(tester(iface)).then(function (result) {
-        updateConnectivityStatus(statusId, result);
+    setBadge(badgeId, 'wait', _('Testing…'));
+    return L.resolveDefault(tester(iface)).then(function (r) {
+        const ok = r && r.success;
+        setBadge(badgeId, ok ? 'ok' : 'bad', ok ? _('Connected') : _('Unreachable'));
     });
 }
 
@@ -64,7 +59,6 @@ return view.extend({
             dormnet.supportedTargets(),
             dormnet.extraArgsAccount(accountId()),
             network.getNetworks(),
-            uci.load('firewall'),
         ]);
     },
     render: function(data) {
@@ -96,55 +90,14 @@ return view.extend({
         o.password = true;
         o.rmempty = false;
 
-        o = s.option(form.ListValue, 'login_iface', _('Login interface'));
-        o.description = _('The WAN interface used to provide IP and MAC address for campus network login.');
-        o.optional = true;
-        o.value('', _('Auto'));
-        for (const networkId of wanNetworkIds()) {
-            o.value(networkId, networkId);
-        }
-
         o = s.option(form.Value, 'connectivity_check_interval', _('Connectivity check interval'));
         o.description = _('Seconds between automatic connectivity checks. Set to 0 to disable automatic checks.');
         o.datatype = 'uinteger';
         o.default = '0';
         o.placeholder = '0';
 
-        o = s.option(form.Button, '_test_internet', _('Test internet connectivity'));
-        o.inputtitle = _('Test');
-        o.inputstyle = 'apply';
-        o.onclick = function () {
-            return testConnectivity(currentAccountId, dormnet.pingInternet, 'internet_status');
-        };
-
-        o = s.option(form.DummyValue, '_internet_status', _('Internet connectivity'));
-        o.cfgvalue = function () {
-            return renderConnectivityStatus('internet_status');
-        };
-
-        o = s.option(form.Button, '_test_campus', _('Test campus connectivity'));
-        o.inputtitle = _('Test');
-        o.inputstyle = 'apply';
-        o.onclick = function () {
-            return testConnectivity(currentAccountId, dormnet.pingCampus, 'campus_status');
-        };
-
-        o = s.option(form.DummyValue, '_campus_status', _('Campus connectivity'));
-        o.cfgvalue = function () {
-            return renderConnectivityStatus('campus_status');
-        };
-
-        const connectivityCheckInterval = parseInt(uci.get('dormnet', currentAccountId, 'connectivity_check_interval') || '0', 10);
-        if (connectivityCheckInterval) {
-            poll.add(function () {
-                return Promise.all([
-                    testConnectivity(currentAccountId, dormnet.pingInternet, 'internet_status'),
-                    testConnectivity(currentAccountId, dormnet.pingCampus, 'campus_status'),
-                ]);
-            }, connectivityCheckInterval);
-        }
-
-        s = m.section(form.GridSection, 'bind_iface', _('Bound Interfaces'));
+        s = m.section(form.GridSection, 'bind_iface', _('Bound Interfaces'),
+            _('Each row represents one interface used both to bind and to perform campus network login.'));
         s.anonymous = true;
         s.addremove = true;
         s.sortable = true;
@@ -155,8 +108,6 @@ return view.extend({
             return account === currentAccountId;
         };
 
-        // parent_account 必须在内联添加场景下也写入，否则 filter 会立即把新行过滤掉。
-        // 不设 modalonly：HiddenValue 本身就不可见，但 parse() 会跑、default 会写。
         o = s.option(form.HiddenValue, 'parent_account');
         o.default = currentAccountId;
         o.write = function (section_id) {
@@ -165,12 +116,8 @@ return view.extend({
 
         o = s.option(form.ListValue, 'iface', _('Interface'));
         o.rmempty = false;
-        for (const network of networks) {
-            const name = network.getName();
-            if (!name || name === 'loopback') {
-                continue;
-            }
-            o.value(name, name);
+        for (const id of allNetworkIds(networks)) {
+            o.value(id, id);
         }
 
         for (const arg of extraArgList) {
@@ -190,6 +137,54 @@ return view.extend({
                     o.value(item.value, _(item.name));
                 }
             }
+        }
+
+        // 公网状态 + 测试按钮
+        o = s.option(form.DummyValue, '_internet', _('Internet'));
+        o.modalonly = false;
+        o.cfgvalue = function (section_id) {
+            const iface = uci.get('dormnet', section_id, 'iface') || '';
+            return E('div', { style: 'display:flex;gap:.4em;align-items:center;' }, [
+                statusBadge(`internet_${section_id}`),
+                E('button', {
+                    'class': 'btn cbi-button cbi-button-action',
+                    'click': function (ev) {
+                        ev.preventDefault();
+                        runTest(`internet_${section_id}`, iface, dormnet.pingInternet);
+                    }
+                }, _('Test'))
+            ]);
+        };
+
+        // 校园网状态 + 测试按钮
+        o = s.option(form.DummyValue, '_campus', _('Campus'));
+        o.modalonly = false;
+        o.cfgvalue = function (section_id) {
+            const iface = uci.get('dormnet', section_id, 'iface') || '';
+            return E('div', { style: 'display:flex;gap:.4em;align-items:center;' }, [
+                statusBadge(`campus_${section_id}`),
+                E('button', {
+                    'class': 'btn cbi-button cbi-button-action',
+                    'click': function (ev) {
+                        ev.preventDefault();
+                        runTest(`campus_${section_id}`, iface, dormnet.pingCampus);
+                    }
+                }, _('Test'))
+            ]);
+        };
+
+        const checkInterval = parseInt(uci.get('dormnet', currentAccountId, 'connectivity_check_interval') || '0', 10);
+        if (checkInterval) {
+            poll.add(function () {
+                const tasks = [];
+                for (const sid of uci.sections('dormnet', 'bind_iface').map(s => s['.name'])) {
+                    if ((uci.get('dormnet', sid, 'parent_account') || '') !== currentAccountId) continue;
+                    const iface = uci.get('dormnet', sid, 'iface') || '';
+                    tasks.push(runTest(`internet_${sid}`, iface, dormnet.pingInternet));
+                    tasks.push(runTest(`campus_${sid}`, iface, dormnet.pingCampus));
+                }
+                return Promise.all(tasks);
+            }, checkInterval);
         }
 
         return m.render();

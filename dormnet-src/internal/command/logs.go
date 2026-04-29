@@ -1,32 +1,14 @@
 package command
 
 import (
-	"fmt"
 	"strings"
 
-	"github.com/openwrt-dormnet/dormnet/internal/master"
 	"github.com/openwrt-dormnet/dormnet/shared/utils"
 )
 
+const maxLogLines = 500
+
 func Logs() *StdJsonOutput {
-	pid := master.DormnetPid()
-
-	if !pid.Exist() {
-		return &StdJsonOutput{
-			Success: true,
-			Message: "",
-			Data:    make([]string, 0),
-		}
-	}
-
-	pidInt, err := pid.Pid()
-	if err != nil {
-		return &StdJsonOutput{
-			Success: false,
-			Message: "failed to get pid",
-		}
-	}
-
 	cli, err := utils.NewShellCli()
 	if err != nil {
 		return &StdJsonOutput{
@@ -34,8 +16,11 @@ func Logs() *StdJsonOutput {
 			Message: "failed to open shell",
 		}
 	}
+	defer cli.Close()
 
-	_, content, err := cli.Run("logread", "|", "grep", fmt.Sprintf("\"dormnet\\[%d\\]\"", pidInt))
+	// logread -e 能走 grep，但部分老版 logread 不支持，退一步用 pipe + grep。
+	// 只按 syslog tag dormnet 过滤，不限 pid，这样重启后的老日志也能看到。
+	_, content, err := cli.Run("logread", "|", "grep", "-F", "dormnet[")
 	if err != nil {
 		return &StdJsonOutput{
 			Success: false,
@@ -43,13 +28,17 @@ func Logs() *StdJsonOutput {
 		}
 	}
 
-	var logs []string
-	if content == "" {
-		logs = make([]string, 0)
-	} else {
-		logs = strings.Split(content, "\n")
-		if len(logs) > 100 {
-			logs = logs[len(logs)-100:]
+	content = strings.TrimRight(content, "\n")
+	logs := []string{}
+	if content != "" {
+		for _, line := range strings.Split(content, "\n") {
+			if line == "" {
+				continue
+			}
+			logs = append(logs, line)
+		}
+		if len(logs) > maxLogLines {
+			logs = logs[len(logs)-maxLogLines:]
 		}
 	}
 
