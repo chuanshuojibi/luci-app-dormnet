@@ -2,6 +2,7 @@
 'require view';
 'require form';
 'require poll';
+'require ui';
 'require uci';
 'require tools.dormnet as dormnet';
 
@@ -38,11 +39,18 @@ return view.extend({
         s = m.section(form.NamedSection, 'basic', 'basic');
 
         o = s.option(form.Flag, 'enabled', _('Enabled'));
-        o.default = false;
+        o.default = '0';
 
         o = s.option(form.Button, 'restart', _('Restart'));
-        o.description = _("Restart manually")
+        o.description = _("Restart manually");
         o.depends('enabled', '1');
+        o.inputtitle = _('Restart');
+        o.inputstyle = 'apply';
+        o.onclick = function () {
+            return L.resolveDefault(dormnet.restart()).then(function () {
+                ui.addNotification(null, E('p', _('DormNet restarted.')), 'info');
+            });
+        };
 
         o = s.option(form.DummyValue, '_running_status', _('Running status'));
         o.cfgvalue = function () {
@@ -72,8 +80,8 @@ return view.extend({
         o.default = '0';
 
         o = s.option(form.ListValue, 'work_with', _('Work with'));
-        o.default = 'master';
-        o.depends('use_sd_network', '1')
+        o.default = 'easytier';
+        o.depends('use_sd_network', '1');
         o.value('easytier', _('EasyTier'));
         // o.value('zerotier', _('ZeroTier'));
 

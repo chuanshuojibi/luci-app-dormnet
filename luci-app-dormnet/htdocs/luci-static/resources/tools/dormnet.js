@@ -5,10 +5,9 @@
 'require rpc';
 'require request';
 
-const callRCInit = rpc.declare({
-    object: 'rc',
-    method: 'init',
-    params: ['name', 'action'],
+const callDormnetRestart = rpc.declare({
+    object: 'luci.dormnet',
+    method: 'restart',
     expect: { '': {} }
 });
 
@@ -81,6 +80,6 @@ return baseclass.extend({
         return callDormnetPingCampus(iface);
     },
     restart: function () {
-        return callRCInit('dormnet', 'reload');
+        return callDormnetRestart();
     }
 });

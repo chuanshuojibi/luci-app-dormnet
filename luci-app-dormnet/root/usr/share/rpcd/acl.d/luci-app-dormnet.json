@@ -10,7 +10,8 @@
           "status",
           "logs",
           "ping_internet",
-          "ping_campus"
+          "ping_campus",
+          "restart"
         ],
         "network.interface.*": [
           "status"

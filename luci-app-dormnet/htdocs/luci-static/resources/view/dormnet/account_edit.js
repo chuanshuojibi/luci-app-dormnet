@@ -152,16 +152,22 @@ return view.extend({
             return account === currentAccountId;
         };
 
+        // parent_account 必须在内联添加场景下也写入，否则 filter 会立即把新行过滤掉。
+        // 不设 modalonly：HiddenValue 本身就不可见，但 parse() 会跑、default 会写。
         o = s.option(form.HiddenValue, 'parent_account');
-        o.modalonly = true;
         o.default = currentAccountId;
+        o.write = function (section_id) {
+            return uci.set('dormnet', section_id, 'parent_account', currentAccountId);
+        };
 
         o = s.option(form.ListValue, 'iface', _('Interface'));
+        o.rmempty = false;
         for (const network of networks) {
-            if (network.sid === 'loopback') {
+            const name = network.getName();
+            if (!name || name === 'loopback') {
                 continue;
             }
-            o.value(network.sid, network.sid);
+            o.value(name, name);
         }
 
         for (const arg of extraArgs.data) {
