@@ -1,0 +1,162 @@
+name: Build IPK (Fast)
+
+# 直接用 GitHub Runner 自带 Go 交叉编译 + 手工打 ipk，绕过 OpenWrt SDK
+# 整个流程 1-2 分钟，首次也快
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/build-ipk-fast.yml'
+      - 'dormnet/**'
+      - 'dormnet-src/**'
+      - 'luci-app-dormnet/**'
+
+concurrency:
+  group: build-ipk-fast-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - openwrt_arch: x86_64
+            goarch: amd64
+            goarm: ''
+            gomips: ''
+          # 需要更多架构时按下方格式追加
+          # - openwrt_arch: aarch64_cortex-a53
+          #   goarch: arm64
+          # - openwrt_arch: arm_cortex-a7_neon-vfpv4
+          #   goarch: arm
+          #   goarm: '7'
+          # - openwrt_arch: mipsel_24kc
+          #   goarch: mipsle
+          #   gomips: softfloat
+
+    env:
+      PKG_VERSION: 0.1.0
+      PKG_RELEASE: 2
+      GO_PKG: github.com/openwrt-dormnet/dormnet
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: dormnet-src/go.mod
+          cache-dependency-path: dormnet-src/go.sum
+
+      - name: Cross-compile dormnet
+        working-directory: dormnet-src
+        env:
+          GOOS: linux
+          GOARCH: ${{ matrix.goarch }}
+          GOARM: ${{ matrix.goarm }}
+          GOMIPS: ${{ matrix.gomips }}
+          CGO_ENABLED: '0'
+        run: |
+          set -e
+          BUILD_TIME=$(date -u -Iseconds)
+          mkdir -p ../dist
+          go build -trimpath \
+            -ldflags "-s -w \
+              -X ${GO_PKG}/internal/constants.version=${PKG_VERSION} \
+              -X ${GO_PKG}/internal/constants.buildTime=${BUILD_TIME}" \
+            -o ../dist/dormnet ./cmd/dormnet
+          file ../dist/dormnet
+
+      - name: Build po2lmo (LuCI i18n compiler)
+        run: |
+          set -e
+          mkdir -p tools/po2lmo && cd tools/po2lmo
+          BASE=https://raw.githubusercontent.com/openwrt/luci/master/modules/luci-base/src
+          curl -sSLf -o po2lmo.c       "$BASE/po2lmo.c"
+          curl -sSLf -o template_lmo.c "$BASE/template_lmo.c"
+          curl -sSLf -o template_lmo.h "$BASE/template_lmo.h"
+          gcc -O2 -o po2lmo po2lmo.c template_lmo.c
+
+      - name: Assemble ipk packages
+        env:
+          ARCH: ${{ matrix.openwrt_arch }}
+        run: |
+          set -e
+          OUT=artifacts
+          mkdir -p "$OUT"
+
+          pack_ipk() {
+            # $1=pkg name, $2=arch, $3=root dir, $4=control dir, $5=output ipk
+            local name="$1" arch="$2" root="$3" ctrl="$4" out="$5"
+            local work
+            work=$(mktemp -d)
+            ( cd "$root" && find . -mindepth 1 -printf '%P\n' | sort \
+                | tar --no-recursion --owner=0 --group=0 --mtime=@0 \
+                      -czf "$work/data.tar.gz" -T - )
+            ( cd "$ctrl" && find . -mindepth 1 -printf '%P\n' | sort \
+                | tar --no-recursion --owner=0 --group=0 --mtime=@0 \
+                      -czf "$work/control.tar.gz" -T - )
+            printf '2.0\n' > "$work/debian-binary"
+            ( cd "$work" && ar rc "$out" debian-binary control.tar.gz data.tar.gz )
+            echo "Built $out"
+            ls -lh "$out"
+          }
+
+          ##################### dormnet #####################
+          PKG=dormnet
+          ROOT=$(mktemp -d); CTRL=$(mktemp -d)
+          install -Dm755 dist/dormnet "$ROOT/usr/bin/dormnet"
+          install -Dm755 dormnet/root/etc/init.d/dormnet "$ROOT/etc/init.d/dormnet"
+          cat > "$CTRL/control" <<EOF
+          Package: ${PKG}
+          Version: ${PKG_VERSION}-${PKG_RELEASE}
+          Architecture: ${ARCH}
+          Maintainer: Haven Madray <sgpublic2002@gmail.com>
+          Section: net
+          Priority: optional
+          Depends: luci-app-mwan3
+          Description: Manage your campus network with DormNet on OpenWrt.
+          EOF
+          echo '/etc/config/dormnet' > "$CTRL/conffiles"
+          pack_ipk "$PKG" "$ARCH" "$ROOT" "$CTRL" \
+            "$PWD/$OUT/${PKG}_${PKG_VERSION}-${PKG_RELEASE}_${ARCH}.ipk"
+
+          ##################### luci-app-dormnet #####################
+          PKG=luci-app-dormnet
+          ROOT=$(mktemp -d); CTRL=$(mktemp -d)
+          mkdir -p "$ROOT/www/luci-static"
+          cp -a luci-app-dormnet/htdocs/luci-static/. "$ROOT/www/luci-static/"
+          cp -a luci-app-dormnet/root/. "$ROOT/"
+          mkdir -p "$ROOT/usr/lib/lua/luci/i18n"
+          # zh_Hans -> LuCI 命名 zh-cn
+          tools/po2lmo/po2lmo \
+            luci-app-dormnet/po/zh_Hans/dormnet.po \
+            "$ROOT/usr/lib/lua/luci/i18n/dormnet.zh-cn.lmo"
+          cat > "$CTRL/control" <<EOF
+          Package: ${PKG}
+          Version: ${PKG_VERSION}-${PKG_RELEASE}
+          Architecture: all
+          Maintainer: Haven Madray <sgpublic2002@gmail.com>
+          Section: luci
+          Priority: optional
+          Depends: luci-base, dormnet
+          Description: LuCI Dormnet module.
+          EOF
+          pack_ipk "$PKG" all "$ROOT" "$CTRL" \
+            "$PWD/$OUT/${PKG}_${PKG_VERSION}-${PKG_RELEASE}_all.ipk"
+
+          echo '== artifacts =='
+          ls -lh "$OUT"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dormnet-ipk-${{ matrix.openwrt_arch }}
+          path: artifacts/*.ipk
+          if-no-files-found: error
