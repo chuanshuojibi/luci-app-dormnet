@@ -18,13 +18,26 @@ func StartInternetCheck(allMemberOnline func() ([]string, errx.Exception)) errx.
 		if len(dormnetAccounts) <= 0 {
 			return errx.NewException("you must add at list one account")
 		}
-		selectedAccount := uci.GetString("basic", "login_account", "")
-		if selectedAccount != "" {
+		selected := uci.GetList("basic", "login_account")
+		// 兼容旧的单值 option：如果 list 为空，再读 string
+		if len(selected) == 0 {
+			if v := uci.GetString("basic", "login_account", ""); v != "" {
+				selected = []string{v}
+			}
+		}
+		if len(selected) > 0 {
+			allowed := map[string]struct{}{}
+			for _, a := range selected {
+				if a != "" {
+					allowed[a] = struct{}{}
+				}
+			}
 			dormnetAccounts = slices.DeleteFunc(dormnetAccounts, func(account string) bool {
-				return account != selectedAccount
+				_, ok := allowed[account]
+				return !ok
 			})
 			if len(dormnetAccounts) <= 0 {
-				return errx.NewException("selected login account does not exist", zap.String("account", selectedAccount))
+				return errx.NewException("none of selected login accounts exist", zap.Strings("accounts", selected))
 			}
 		}
 

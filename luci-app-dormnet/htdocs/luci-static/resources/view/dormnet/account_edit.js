@@ -20,11 +20,32 @@ function allNetworkIds(networks) {
     return ids;
 }
 
-function statusBadge(id, label) {
+// 一个账号 = 一个 bind_iface。section 名固定为 bind_<account>，方便定位与去重。
+function ensureBindSection(currentAccountId) {
+    const expected = `bind_${currentAccountId}`;
+    const owned = uci.sections('dormnet', 'bind_iface').filter(function (s) {
+        return (s.parent_account || '') === currentAccountId;
+    });
+
+    if (owned.length === 0) {
+        uci.add('dormnet', 'bind_iface', expected);
+        uci.set('dormnet', expected, 'parent_account', currentAccountId);
+        return expected;
+    }
+
+    // 多余的删掉，保留第一个
+    const keep = owned[0]['.name'];
+    for (let i = 1; i < owned.length; i++) {
+        uci.remove('dormnet', owned[i]['.name']);
+    }
+    return keep;
+}
+
+function statusBadge(id) {
     return E('span', {
         id: id,
-        style: 'display:inline-block;min-width:5em;padding:.15em .5em;border-radius:.3em;background:#eee;color:#666;font-style:italic;text-align:center;'
-    }, label || _('Not tested'));
+        style: 'display:inline-block;min-width:6em;padding:.15em .5em;border-radius:.3em;background:#eee;color:#666;font-style:italic;text-align:center;'
+    }, _('Not tested'));
 }
 
 function setBadge(id, state, text) {
@@ -40,16 +61,52 @@ function setBadge(id, state, text) {
     el.textContent = text;
 }
 
-function runTest(badgeId, iface, tester) {
+function setOutput(id, text) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = text || '';
+    el.style.display = text ? 'block' : 'none';
+}
+
+function runTest(badgeId, outId, iface, tester) {
     if (!iface) {
         setBadge(badgeId, 'bad', _('No interface'));
+        setOutput(outId, _('No interface selected.'));
         return Promise.resolve();
     }
     setBadge(badgeId, 'wait', _('Testing…'));
+    setOutput(outId, _('Running ping…'));
     return L.resolveDefault(tester(iface)).then(function (r) {
         const ok = r && r.success;
-        setBadge(badgeId, ok ? 'ok' : 'bad', ok ? _('Connected') : _('Unreachable'));
+        setBadge(badgeId, ok ? 'ok' : 'bad',
+            ok ? _('Connected') : (r && r.message) || _('Unreachable'));
+        const data = (r && r.data) || {};
+        const header = data.device
+            ? `# ping -I ${data.device} ${data.target}\n`
+            : `# ${(r && r.message) || ''}\n`;
+        setOutput(outId, header + (data.output || ''));
     });
+}
+
+function testerCell(prefix, accountId, getIface, tester) {
+    const badgeId = `${prefix}_${accountId}`;
+    const outId = `${prefix}out_${accountId}`;
+    return E('div', { style: 'display:flex;flex-direction:column;gap:.3em;' }, [
+        E('div', { style: 'display:flex;gap:.4em;align-items:center;' }, [
+            statusBadge(badgeId),
+            E('button', {
+                'class': 'btn cbi-button cbi-button-action',
+                'click': function (ev) {
+                    ev.preventDefault();
+                    runTest(badgeId, outId, getIface(), tester);
+                }
+            }, _('Test'))
+        ]),
+        E('pre', {
+            id: outId,
+            style: 'display:none;margin:0;padding:.4em .6em;background:#0f111a;color:#d1d5db;font-size:11px;line-height:1.35;border-radius:.3em;max-height:160px;overflow:auto;white-space:pre-wrap;word-break:break-all;'
+        }, '')
+    ]);
 }
 
 // noinspection JSAnnotator
@@ -72,7 +129,11 @@ return view.extend({
         const targetList = (supportedTargets && supportedTargets.data) || [];
         const extraArgList = (extraArgs && extraArgs.data) || [];
 
-        m = new form.Map('dormnet', `${_('Account Edit')} >> ${currentAccountId}`);
+        // 确保该账号有且仅有一个 bind_iface 段
+        const bindSid = ensureBindSection(currentAccountId);
+
+        m = new form.Map('dormnet', `${_('Account Edit')} >> ${currentAccountId}`,
+            _('One account binds to exactly one interface; configure it all on this single page.'));
 
         s = m.section(form.NamedSection, currentAccountId, 'account');
 
@@ -90,31 +151,26 @@ return view.extend({
         o.password = true;
         o.rmempty = false;
 
-        o = s.option(form.Value, 'connectivity_check_interval', _('Connectivity check interval'));
-        o.description = _('Seconds between automatic connectivity checks. Set to 0 to disable automatic checks.');
-        o.datatype = 'uinteger';
-        o.default = '0';
-        o.placeholder = '0';
+        // ---- 接口 + 运营商等额外参数（实际写入 bind_<account> 段）----
+        function bindOption(klass, optName, title) {
+            const opt = s.option(klass, `_bind_${optName}`, title);
+            opt.cfgvalue = function () {
+                return uci.get('dormnet', bindSid, optName) || '';
+            };
+            opt.write = function (_sid, value) {
+                if (value === undefined || value === null || value === '') {
+                    uci.unset('dormnet', bindSid, optName);
+                } else {
+                    uci.set('dormnet', bindSid, optName, value);
+                }
+            };
+            opt.remove = function () {
+                uci.unset('dormnet', bindSid, optName);
+            };
+            return opt;
+        }
 
-        s = m.section(form.GridSection, 'bind_iface', _('Bound Interfaces'),
-            _('Each row represents one interface used both to bind and to perform campus network login.'));
-        s.anonymous = true;
-        s.addremove = true;
-        s.sortable = true;
-        s.cloneable = true;
-        s.nodescriptions = true;
-        s.filter = function (section_id) {
-            const account = uci.get('dormnet', section_id, 'parent_account') || '';
-            return account === currentAccountId;
-        };
-
-        o = s.option(form.HiddenValue, 'parent_account');
-        o.default = currentAccountId;
-        o.write = function (section_id) {
-            return uci.set('dormnet', section_id, 'parent_account', currentAccountId);
-        };
-
-        o = s.option(form.ListValue, 'iface', _('Interface'));
+        o = bindOption(form.ListValue, 'iface', _('Interface'));
         o.rmempty = false;
         for (const id of allNetworkIds(networks)) {
             o.value(id, id);
@@ -122,7 +178,7 @@ return view.extend({
 
         for (const arg of extraArgList) {
             if (!arg || !arg.type || !form[arg.type]) continue;
-            o = s.option(form[arg.type], arg.id, _(arg.title));
+            o = bindOption(form[arg.type], arg.id, _(arg.title));
             o.password = !!arg.is_pwd;
             o.description = arg.desc;
             if (arg.default !== undefined) o.default = arg.default;
@@ -131,7 +187,6 @@ return view.extend({
             } else {
                 o.optional = true;
             }
-            if (arg.modalonly) o.modalonly = true;
             if (arg.type === 'ListValue' && Array.isArray(arg.candidates)) {
                 for (const item of arg.candidates) {
                     o.value(item.value, _(item.name));
@@ -139,51 +194,35 @@ return view.extend({
             }
         }
 
-        // 公网状态 + 测试按钮
+        // ---- 连通性测试 ----
+        o = s.option(form.Value, 'connectivity_check_interval', _('Auto check interval (s)'));
+        o.description = _('Seconds between automatic connectivity checks. 0 disables auto check.');
+        o.datatype = 'uinteger';
+        o.default = '0';
+        o.placeholder = '0';
+
+        function currentIface() {
+            return uci.get('dormnet', bindSid, 'iface') || '';
+        }
+
         o = s.option(form.DummyValue, '_internet', _('Internet'));
-        o.modalonly = false;
-        o.cfgvalue = function (section_id) {
-            const iface = uci.get('dormnet', section_id, 'iface') || '';
-            return E('div', { style: 'display:flex;gap:.4em;align-items:center;' }, [
-                statusBadge(`internet_${section_id}`),
-                E('button', {
-                    'class': 'btn cbi-button cbi-button-action',
-                    'click': function (ev) {
-                        ev.preventDefault();
-                        runTest(`internet_${section_id}`, iface, dormnet.pingInternet);
-                    }
-                }, _('Test'))
-            ]);
+        o.cfgvalue = function () {
+            return testerCell('internet', currentAccountId, currentIface, dormnet.pingInternet);
         };
 
-        // 校园网状态 + 测试按钮
         o = s.option(form.DummyValue, '_campus', _('Campus'));
-        o.modalonly = false;
-        o.cfgvalue = function (section_id) {
-            const iface = uci.get('dormnet', section_id, 'iface') || '';
-            return E('div', { style: 'display:flex;gap:.4em;align-items:center;' }, [
-                statusBadge(`campus_${section_id}`),
-                E('button', {
-                    'class': 'btn cbi-button cbi-button-action',
-                    'click': function (ev) {
-                        ev.preventDefault();
-                        runTest(`campus_${section_id}`, iface, dormnet.pingCampus);
-                    }
-                }, _('Test'))
-            ]);
+        o.cfgvalue = function () {
+            return testerCell('campus', currentAccountId, currentIface, dormnet.pingCampus);
         };
 
         const checkInterval = parseInt(uci.get('dormnet', currentAccountId, 'connectivity_check_interval') || '0', 10);
         if (checkInterval) {
             poll.add(function () {
-                const tasks = [];
-                for (const sid of uci.sections('dormnet', 'bind_iface').map(s => s['.name'])) {
-                    if ((uci.get('dormnet', sid, 'parent_account') || '') !== currentAccountId) continue;
-                    const iface = uci.get('dormnet', sid, 'iface') || '';
-                    tasks.push(runTest(`internet_${sid}`, iface, dormnet.pingInternet));
-                    tasks.push(runTest(`campus_${sid}`, iface, dormnet.pingCampus));
-                }
-                return Promise.all(tasks);
+                const iface = currentIface();
+                return Promise.all([
+                    runTest(`internet_${currentAccountId}`, `internetout_${currentAccountId}`, iface, dormnet.pingInternet),
+                    runTest(`campus_${currentAccountId}`, `campusout_${currentAccountId}`, iface, dormnet.pingCampus),
+                ]);
             }, checkInterval);
         }
 

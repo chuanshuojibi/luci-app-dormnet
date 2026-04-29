@@ -17,21 +17,39 @@ function json_process(command) {
     return profile;
 }
 
+function shell_read(command) {
+    const p = popen(command);
+    if (!p) return "";
+    let buf = "";
+    let chunk;
+    while ((chunk = p.read(4096)) !== null && chunk !== "") {
+        buf += chunk;
+    }
+    p.close();
+    return buf;
+}
+
 function iface_device(iface) {
     if (!match(iface, /^[A-Za-z0-9_.:-]+$/)) {
         return "";
     }
 
-    const command = `ubus call network.interface.${iface} status 2>/dev/null`;
-    const process = popen(command);
-    if (!process) {
-        return iface;
+    // 1) 当成 network 名字查 ubus
+    const out = shell_read(`ubus call network.interface.${iface} status 2>/dev/null`);
+    if (out) {
+        try {
+            const status = json(out);
+            const dev = status?.l3_device || status?.device;
+            if (dev) return dev;
+        } catch (e) {}
     }
 
-    const status = json(process);
-    process.close();
+    // 2) 退而求其次：直接当设备名用（用户填了 eth1/br-lan 这种）
+    const exists = shell_read(`[ -d /sys/class/net/${iface} ] && echo yes`);
+    if (trim(exists) === "yes") return iface;
 
-    return status?.l3_device || status?.device || iface;
+    // 3) 找不到设备
+    return "";
 }
 
 function ping_iface(iface, target) {
@@ -39,12 +57,38 @@ function ping_iface(iface, target) {
     if (!device || !match(device, /^[A-Za-z0-9_.:-]+$/)) {
         return {
             "success": false,
-            "message": "invalid interface name",
+            "message": `interface "${iface}" has no resolvable L3 device`,
+            "data": {
+                "iface": iface,
+                "device": "",
+                "target": target,
+                "output": "",
+                "loss": 100,
+            },
         };
     }
 
-    const command = `ping -I ${device} -c 3 -W 2 ${target} >/dev/null 2>&1 && echo '{"success":true,"message":"connected"}' || echo '{"success":false,"message":"unreachable"}'`;
-    return json_process(command);
+    // 把 stderr 也合到 stdout，原样返回给 UI 展示
+    const cmd = `ping -I ${device} -c 4 -W 2 ${target} 2>&1`;
+    const output = shell_read(cmd);
+
+    // 解析丢包率
+    let loss = 100;
+    const m = match(output, /([0-9]+)% packet loss/);
+    if (m) loss = +m[1];
+    const success = loss < 100;
+
+    return {
+        "success": success,
+        "message": success ? `reachable (${100 - loss}% replied)` : "unreachable",
+        "data": {
+            "iface": iface,
+            "device": device,
+            "target": target,
+            "output": output,
+            "loss": loss,
+        },
+    };
 }
 
 const methods = {
