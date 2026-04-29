@@ -41,7 +41,7 @@ jobs:
 
     env:
       PKG_VERSION: 0.1.0
-      PKG_RELEASE: 3
+      PKG_RELEASE: 4
       GO_PKG: github.com/openwrt-dormnet/dormnet
 
     steps:

@@ -47,9 +47,9 @@ func NewRequestContext(iface string, extraArgs any) (*RequestContext, errx.Excep
 		return nil, errx.NewExceptionWithCause(err, "failed to query status", zap.String("iface", iface))
 	}
 	if !up.Up || !up.Available {
-		err = controller.WaitForUp(time.Second * 5)
-		if err != nil {
-			return nil, nil
+		if err = controller.WaitForUp(time.Second * 5); err != nil {
+			return nil, errx.NewExceptionWithCause(err,
+				"interface not up after waiting", zap.String("iface", iface))
 		}
 	}
 	mac, err := controller.QueryMac()

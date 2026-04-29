@@ -81,10 +81,12 @@ func (c *Cqupt) Process(ifaces []*registry.DormnetClientBindIface) errx.Exceptio
 			log.Warn("error occur on the campus network, try restarting the interface...",
 				zap.String("iface", iface.Iface), zap.String("status", string(dormStatus)),
 				zap.Error(err))
-			_ = ctx.IfaceController.WaitForDown(time.Second * 5)
-			_ = ctx.IfaceController.WaitForUp(time.Second * 5)
-			if _, err := ctx.IfaceController.WaitForIp(time.Second * 5); err != nil {
-				return errx.NewExceptionWithCause(err, "error occur during waiting for ip")
+			_ = ctx.IfaceController.WaitForDown(time.Second * 10)
+			_ = ctx.IfaceController.WaitForUp(time.Second * 10)
+			// 重启后 DHCP 续约通常要 10~20s，给宽裕一点
+			if _, err := ctx.IfaceController.WaitForIp(time.Second * 30); err != nil {
+				return errx.NewExceptionWithCause(err, "error occur during waiting for ip after restart",
+					zap.String("iface", iface.Iface))
 			}
 			utils.DelayAndLog(time.Second * 15)
 			nextDormStatus, err := c.checkStatus(ctx)
