@@ -32,6 +32,8 @@ func MainFunc() (code int, output *command.StdJsonOutput) {
 
 	logs := flag.Bool("logs", false, "print syslog")
 
+	accountStatus := flag.Bool("account-status", false, "get per-account login status")
+
 	daemon := flag.Bool("daemon", false, "daemon mode")
 
 	flag.Parse()
@@ -56,6 +58,8 @@ func MainFunc() (code int, output *command.StdJsonOutput) {
 			output = command.Ping(*iface, *target)
 		} else if *logs {
 			output = command.Logs()
+		} else if *accountStatus {
+			output = command.AccountStatus()
 		} else {
 			output = &command.StdJsonOutput{
 				Success: false,

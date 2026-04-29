@@ -129,6 +129,13 @@ const methods = {
         }
     },
 
+    account_status: {
+        call: function() {
+            const command = `dormnet -account-status`;
+            return json_process(command);
+        }
+    },
+
     ping_internet: {
         args: { iface: 'iface' },
         call: function(req) {

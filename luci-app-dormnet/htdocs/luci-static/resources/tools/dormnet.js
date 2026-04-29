@@ -42,6 +42,12 @@ const callDormnetLogs = rpc.declare({
     expect: { '': {} }
 });
 
+const callDormnetAccountStatus = rpc.declare({
+    object: 'luci.dormnet',
+    method: 'account_status',
+    expect: { '': {} }
+});
+
 const callDormnetPingInternet = rpc.declare({
     object: 'luci.dormnet',
     method: 'ping_internet',
@@ -72,6 +78,9 @@ return baseclass.extend({
     },
     logs: function () {
         return callDormnetLogs();
+    },
+    accountStatus: function () {
+        return callDormnetAccountStatus();
     },
     pingInternet: function (iface) {
         return callDormnetPingInternet(iface);

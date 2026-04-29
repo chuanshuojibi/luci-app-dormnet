@@ -126,8 +126,16 @@ return view.extend({
         const networks = data[2] || [];
         const currentAccountId = accountId();
 
-        const targetList = (supportedTargets && supportedTargets.data) || [];
-        const extraArgList = (extraArgs && extraArgs.data) || [];
+        const rawTargets = supportedTargets && supportedTargets.data;
+        const rawExtra   = extraArgs && extraArgs.data;
+        const targetList  = Array.isArray(rawTargets) ? rawTargets : [];
+        const extraArgList = Array.isArray(rawExtra) ? rawExtra : [];
+        if (!Array.isArray(rawTargets)) {
+            console.warn('[dormnet] supportedTargets() returned non-array data:', supportedTargets);
+        }
+        if (!Array.isArray(rawExtra)) {
+            console.warn('[dormnet] extraArgsAccount() returned non-array data:', extraArgs);
+        }
 
         // 确保该账号有且仅有一个 bind_iface 段
         const bindSid = ensureBindSection(currentAccountId);

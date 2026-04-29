@@ -52,6 +52,49 @@ function runTest(badgeId, outId, iface, tester) {
     });
 }
 
+function loginBadgeColors(state) {
+    switch (state) {
+        case 'Online':    return { bg: '#d4edda', fg: '#155724' };
+        case 'LoggingIn': return { bg: '#cfe2ff', fg: '#084298' };
+        case 'Checking':  return { bg: '#fff3cd', fg: '#856404' };
+        case 'Backoff':   return { bg: '#fff3cd', fg: '#856404' };
+        case 'Failed':    return { bg: '#f8d7da', fg: '#721c24' };
+        case 'GivenUp':   return { bg: '#f5c6cb', fg: '#721c24' };
+        default:          return { bg: '#eee',    fg: '#666'    };
+    }
+}
+
+function loginBadgeText(st) {
+    if (!st) return _('Unknown');
+    if (st.status === 'Backoff' && st.next_attempt_at) {
+        const remain = Math.max(0, st.next_attempt_at - Math.floor(Date.now() / 1000));
+        const mm = Math.floor(remain / 60), ss = remain % 60;
+        return `${st.status} (#${st.retry||0}, ${mm}:${ss < 10 ? '0' + ss : ss})`;
+    }
+    if (st.status === 'GivenUp') return `GivenUp (#${st.retry || 0})`;
+    if (st.status === 'Failed' && st.last_error) return 'Failed';
+    return st.status || _('Unknown');
+}
+
+function renderLoginBadge(id, st) {
+    const c = loginBadgeColors(st && st.status);
+    return E('span', {
+        id: id,
+        title: (st && st.last_error) || '',
+        style: 'display:inline-block;min-width:7em;padding:.15em .5em;border-radius:.3em;background:' + c.bg + ';color:' + c.fg + ';text-align:center;font-size:12px;'
+    }, loginBadgeText(st));
+}
+
+function applyLoginBadge(id, st) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const c = loginBadgeColors(st && st.status);
+    el.style.background = c.bg;
+    el.style.color = c.fg;
+    el.title = (st && st.last_error) || '';
+    el.textContent = loginBadgeText(st);
+}
+
 function renderStatus(running) {
     return updateStatus(E('input', { id: 'running_status', style: 'border: unset; font-style: italic; font-weight: bold;', readonly: '' }), running);
 }
@@ -71,11 +114,18 @@ return view.extend({
             dormnet.status(),
             dormnet.buildInfo(),
             uci.load('dormnet'),
+            L.resolveDefault(dormnet.accountStatus(), { success: false, data: { states: [] } }),
         ]);
     },
     render: function(data) {
         const status = data[0];
         const buildInfo = data[1];
+        const initStatus = data[3] || {};
+        const initStates = ((initStatus.data || {}).states) || [];
+        const stateMap = {};
+        for (const st of initStates) {
+            stateMap[`${st.account}|${st.iface}`] = st;
+        }
 
         let m, s, o;
 
@@ -157,7 +207,7 @@ return view.extend({
             if (list.length === 0) {
                 overviewRows.push(E('tr', {}, [
                     E('td', {}, acc.username || sid),
-                    E('td', { colspan: 4, style: 'color:#888;font-style:italic;' },
+                    E('td', { colspan: 5, style: 'color:#888;font-style:italic;' },
                         _('No bound interfaces. Configure in Account Setting.'))
                 ]));
                 continue;
@@ -166,9 +216,12 @@ return view.extend({
                 const ifname = b.iface || '';
                 const bsid = b['.name'];
                 const tag = `${sid}_${bsid}`;
-                overviewRows.push(E('tr', {}, [
+                const loginBadgeId = `ov_login_${tag}`;
+                const stKey = `${sid}|${ifname}`;
+                overviewRows.push(E('tr', { 'data-state-key': stKey }, [
                     E('td', {}, acc.username || sid),
                     E('td', {}, ifname || E('em', _('unset'))),
+                    E('td', {}, renderLoginBadge(loginBadgeId, stateMap[stKey])),
                     E('td', {}, [
                         E('div', { style: 'display:flex;flex-direction:column;gap:.3em;' }, [
                             E('div', { style: 'display:flex;gap:.4em;align-items:center;' }, [
@@ -239,12 +292,30 @@ return view.extend({
                     E('thead', {}, E('tr', {}, [
                         E('th', { 'class': 'th' }, _('Account')),
                         E('th', { 'class': 'th' }, _('Interface')),
+                        E('th', { 'class': 'th' }, _('Login Status')),
                         E('th', { 'class': 'th' }, _('Internet')),
                         E('th', { 'class': 'th' }, _('Campus')),
                     ])),
                     E('tbody', {}, overviewRows),
                 ]),
         ]);
+
+        // 5 \u79d2\u8f6e\u8be2\u4e00\u6b21\u767b\u5f55\u72b6\u6001\uff0c\u5237\u65b0\u5f92\u7ae0
+        poll.add(function () {
+            return L.resolveDefault(dormnet.accountStatus(),
+                { success: false, data: { states: [] } }).then(function (resp) {
+                const sts = ((resp && resp.data) || {}).states || [];
+                const m = {};
+                for (const st of sts) {
+                    m[`${st.account}|${st.iface}`] = st;
+                }
+                document.querySelectorAll('tr[data-state-key]').forEach(function (tr) {
+                    const k = tr.getAttribute('data-state-key');
+                    const idMatch = tr.querySelector('span[id^="ov_login_"]');
+                    if (idMatch) applyLoginBadge(idMatch.id, m[k]);
+                });
+            });
+        }, 5);
 
         return Promise.resolve(m.render()).then(function (mapNode) {
             return E('div', {}, [mapNode, overview]);

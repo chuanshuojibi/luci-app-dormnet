@@ -9,6 +9,7 @@
           "list_target",
           "status",
           "logs",
+          "account_status",
           "ping_internet",
           "ping_campus",
           "restart"
