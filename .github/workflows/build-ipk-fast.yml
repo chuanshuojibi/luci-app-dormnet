@@ -156,6 +156,31 @@ jobs:
           Description: Manage your campus network with DormNet on OpenWrt.
           EOF
           echo '/etc/config/dormnet' > "$CTRL/conffiles"
+          # postinst：装完后启用并启动服务、跑 uci-defaults
+          cat > "$CTRL/postinst" <<'POST'
+          #!/bin/sh
+          [ -n "$IPKG_INSTROOT" ] && exit 0
+          if [ -x /etc/init.d/dormnet ]; then
+              /etc/init.d/dormnet enable
+              /etc/init.d/dormnet restart >/dev/null 2>&1
+          fi
+          for f in /etc/uci-defaults/80-dormnet; do
+              [ -f "$f" ] && ( . "$f" ) && rm -f "$f"
+          done
+          exit 0
+          POST
+          chmod 0755 "$CTRL/postinst"
+          # prerm：卸载前停服务
+          cat > "$CTRL/prerm" <<'PRE'
+          #!/bin/sh
+          [ -n "$IPKG_INSTROOT" ] && exit 0
+          if [ -x /etc/init.d/dormnet ]; then
+              /etc/init.d/dormnet stop >/dev/null 2>&1
+              /etc/init.d/dormnet disable
+          fi
+          exit 0
+          PRE
+          chmod 0755 "$CTRL/prerm"
           pack_ipk "$PKG" "$ARCH" "$ROOT" "$CTRL" \
             "$PWD/$OUT/${PKG}_${PKG_VERSION}-${PKG_RELEASE}_${ARCH}.ipk"
 
@@ -177,9 +202,27 @@ jobs:
           Maintainer: Haven Madray <sgpublic2002@gmail.com>
           Section: luci
           Priority: optional
-          Depends: luci-base, dormnet
+          Depends: luci-base, dormnet, rpcd-mod-ucode, ucode-mod-fs
           Description: LuCI Dormnet module.
           EOF
+          # postinst：清 luci 缓存 + 重载 rpcd 注册我们的 ubus 对象
+          cat > "$CTRL/postinst" <<'POST'
+          #!/bin/sh
+          [ -n "$IPKG_INSTROOT" ] && exit 0
+          rm -rf /tmp/luci-indexcache /tmp/luci-modulecache 2>/dev/null
+          /etc/init.d/rpcd reload >/dev/null 2>&1
+          /etc/init.d/uhttpd restart >/dev/null 2>&1
+          exit 0
+          POST
+          chmod 0755 "$CTRL/postinst"
+          cat > "$CTRL/postrm" <<'POSTRM'
+          #!/bin/sh
+          [ -n "$IPKG_INSTROOT" ] && exit 0
+          rm -rf /tmp/luci-indexcache /tmp/luci-modulecache 2>/dev/null
+          /etc/init.d/rpcd reload >/dev/null 2>&1
+          exit 0
+          POSTRM
+          chmod 0755 "$CTRL/postrm"
           pack_ipk "$PKG" all "$ROOT" "$CTRL" \
             "$PWD/$OUT/${PKG}_${PKG_VERSION}-${PKG_RELEASE}_all.ipk"
 
