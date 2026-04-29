@@ -28,9 +28,14 @@ function ensureBindSection(currentAccountId) {
     });
 
     if (owned.length === 0) {
-        uci.add('dormnet', 'bind_iface', expected);
-        uci.set('dormnet', expected, 'parent_account', currentAccountId);
-        return expected;
+        // uci.add 返回真实 SID。不同 LuCI 版本对 name 参数支持不同，必须以返回值为准。
+        const sid = uci.add('dormnet', 'bind_iface', expected);
+        if (!sid) {
+            console.error('[dormnet] uci.add returned no SID for', currentAccountId);
+            return null;
+        }
+        uci.set('dormnet', sid, 'parent_account', currentAccountId);
+        return sid;
     }
 
     // 多余的删掉，保留第一个
@@ -178,10 +183,10 @@ return view.extend({
             return opt;
         }
 
-        o = bindOption(form.ListValue, 'iface', _('Interface'));
-        o.rmempty = false;
+        const ifaceOpt = bindOption(form.ListValue, 'iface', _('Interface'));
+        ifaceOpt.rmempty = false;
         for (const id of allNetworkIds(networks)) {
-            o.value(id, id);
+            ifaceOpt.value(id, id);
         }
 
         for (const arg of extraArgList) {
@@ -210,6 +215,11 @@ return view.extend({
         o.placeholder = '0';
 
         function currentIface() {
+            // 优先取表单当前值（用户刚选完还没保存也能测）
+            try {
+                const v = ifaceOpt.formvalue(currentAccountId);
+                if (v) return v;
+            } catch (e) {}
             return uci.get('dormnet', bindSid, 'iface') || '';
         }
 
