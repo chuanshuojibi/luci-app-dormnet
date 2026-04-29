@@ -126,6 +126,25 @@ jobs:
           ROOT=$(mktemp -d); CTRL=$(mktemp -d)
           install -Dm755 dist/dormnet "$ROOT/usr/bin/dormnet"
           install -Dm755 dormnet/root/etc/init.d/dormnet "$ROOT/etc/init.d/dormnet"
+          # 默认 UCI 配置：LuCI 和 Go 程序都读 /etc/config/dormnet
+          install -d "$ROOT/etc/config"
+          cat > "$ROOT/etc/config/dormnet" <<'UCI'
+          config basic 'basic'
+              option enabled '0'
+              option work_mode 'master'
+              option listen '127.0.0.1:10721'
+
+          config airkv 'airkv'
+              option store_path '/etc/dormnet/airkv'
+          UCI
+          # 安装后自动 reload，可保证服务在新配置下重启
+          install -d "$ROOT/etc/uci-defaults"
+          cat > "$ROOT/etc/uci-defaults/80-dormnet" <<'UDEF'
+          #!/bin/sh
+          [ -x /etc/init.d/dormnet ] && /etc/init.d/dormnet enable
+          exit 0
+          UDEF
+          chmod 0755 "$ROOT/etc/uci-defaults/80-dormnet"
           cat > "$CTRL/control" <<EOF
           Package: ${PKG}
           Version: ${PKG_VERSION}-${PKG_RELEASE}
